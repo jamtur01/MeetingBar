@@ -96,6 +96,24 @@ final class MeetingLinkDetectorTests: XCTestCase {
         XCTAssertEqual(link?.url.absoluteString, url)
     }
 
+    func testDetectsTeamsPersonalShortURL() {
+        // Personal / consumer "Teams for Life" host (teams.live.com) uses the
+        // same `meet/{id}?p={passcode}` short-URL form as the enterprise host.
+        let url = "https://teams.live.com/meet/9425716001426?p=0SystrMw2goKHi8LK6"
+        let link = detectMeetingLink(url)
+
+        XCTAssertEqual(link?.service, .teams)
+        XCTAssertEqual(link?.url.absoluteString, url)
+    }
+
+    func testDetectsTeamsPersonalShortURLWithAdditionalQueryParameters() {
+        let url = "https://teams.live.com/meet/9425716001426?p=0SystrMw2goKHi8LK6&anon=true"
+        let link = detectMeetingLink(url)
+
+        XCTAssertEqual(link?.service, .teams)
+        XCTAssertEqual(link?.url.absoluteString, url)
+    }
+
     func testDetectsSupportedTeamsGovernmentHosts() {
         let urls = [
             "https://teams.microsoft.us/meet/1234567890123?p=Aa1Bb2Cc3Dd4Ee5",
@@ -116,6 +134,7 @@ final class MeetingLinkDetectorTests: XCTestCase {
             "https://teams.microsoft.com/",
             "https://teams.microsoft.com/l/meeting/new",
             "https://teams.microsoft.com/meet/1234567890123",
+            "https://teams.live.com/meet/9425716001426",
             "https://teams.microsoft.com/meet/channel?p=Aa1Bb2Cc3Dd4Ee5"
         ]
 
@@ -155,6 +174,44 @@ final class MeetingLinkDetectorTests: XCTestCase {
         for url in urls {
             XCTAssertNil(detectMeetingLink(url), url)
         }
+    }
+
+    func testDetectsZoomGovLinkWithPassword() {
+        // ZoomGov (`zoomgov.com`) is the same Zoom product hosted for government
+        // accounts, so its join URL has Zoom's `/j/<meetingID>?pwd=<hash>` shape
+        // and password encoding. The hash commonly carries `-`, `_`, `.`, `+`,
+        // and `/`; the original path class `[a-zA-Z0-9?&=]+` stopped at the first
+        // such character, handing the browser a truncated `pwd=` that Zoom
+        // rejected as a wrong/missing password.
+        let urls = [
+            "https://www.zoomgov.com/j/16111111111?pwd=abc-DEF123-GHI",
+            "https://www.zoomgov.com/j/16111111111?pwd=abc_DEF.123",
+            "https://www.zoomgov.com/j/16111111111?pwd=abc+DEF/123",
+            "https://www.zoomgov.com/j/16111111111?pwd=abcdef123"
+        ]
+
+        for url in urls {
+            let link = detectMeetingLink(url)
+
+            XCTAssertEqual(link?.service, .zoomgov, url)
+            XCTAssertEqual(link?.url.absoluteString, url, url)
+        }
+    }
+
+    func testDetectsZoomGovLinkWithoutPassword() {
+        let url = "https://www.zoomgov.com/j/1234567890"
+        let link = detectMeetingLink(url)
+
+        XCTAssertEqual(link?.service, .zoomgov)
+        XCTAssertEqual(link?.url.absoluteString, url)
+    }
+
+    func testDoesNotMatchNonMeetingZoomGovPages() {
+        // A bare `/j/` with no meeting id is not a real join link and must not
+        // match — mirrors the Zhumu guard in testDoesNotMatchNonMeetingZhumuPages.
+        let url = "https://www.zoomgov.com/j/"
+
+        XCTAssertNil(detectMeetingLink(url), url)
     }
 
     func testDetectsCustomRegexLinkFromNotes() {
