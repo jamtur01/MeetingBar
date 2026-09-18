@@ -1452,6 +1452,22 @@ final class StatusBarItemControllerPresentationTests: BaseTestCase {
         XCTAssertEqual(button.attributedTitle.string, "")
     }
 
+    func test_renderStatusBarUsesFallbackWhenSentinelIconIsHidden() throws {
+        let controller = StatusBarItemController()
+        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+
+        // A next event without a meeting service resolves to the hidden
+        // "no_online_session" sentinel (imagePosition == .noImage). With an empty
+        // title that would leave the item completely blank, so it must fall back
+        // to a visible icon instead.
+        controller.renderStatusBar(makePresentation(icon: .meetingService(nil)))
+
+        let button = try XCTUnwrap(controller.statusItem.button)
+        XCTAssertEqual(button.imagePosition, .imageLeft)
+        XCTAssertNotEqual(button.image?.name(), "no_online_session")
+        XCTAssertEqual(button.attributedTitle.string, "")
+    }
+
     func test_updateTitleCompactsLongVisibleTitleWithoutForcingFallbackIcon() throws {
         configureStatusBarDefaults()
         Defaults[.eventTitleIconFormat] = .none
@@ -1605,6 +1621,22 @@ final class StatusBarItemControllerPresentationTests: BaseTestCase {
         Defaults[.statusbarEventTitleLength] = statusbarEventTitleLengthLimits.max
         Defaults[.personalEventsAppereance] = .show_active
         Defaults[.nonAllDayEvents] = .show
+    }
+
+    func test_renderStatusBarPreservesProviderIconSize() throws {
+        let controller = StatusBarItemController()
+        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+
+        for provider in MeetingProvider.all {
+            guard let service = MeetingServices(rawValue: provider.id) else { continue }
+
+            controller.renderStatusBar(makePresentation(icon: .meetingService(service)))
+
+            let button = try XCTUnwrap(controller.statusItem.button)
+            let expected = NSSize(width: provider.iconWidth, height: provider.iconHeight)
+            XCTAssertEqual(button.image?.size, expected)
+            XCTAssertEqual(getIconForMeetingService(service).size, expected)
+        }
     }
 
     private func makePresentation(

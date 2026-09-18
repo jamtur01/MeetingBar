@@ -229,12 +229,12 @@ final class StatusBarItemController {
         switch presentation.icon {
         case .asset(let name):
             button.image = MenuStyleConstants.iconNamed(name)
+            button.image?.size = MenuStyleConstants.iconSize
         case .meetingService(let service):
             button.image = getIconForMeetingService(service)
         case .none:
             break
         }
-        button.image?.size = MenuStyleConstants.iconSize
         button.imagePosition = button.image?.name() == "no_online_session" ? .noImage : .imageLeft
 
         if presentation.mode == .nextEvent {
@@ -246,7 +246,10 @@ final class StatusBarItemController {
     }
 
     private func ensureStatusBarButtonIsVisible(_ button: NSStatusBarButton) {
-        guard button.image == nil,
+        // A set-but-suppressed image (imagePosition == .noImage, e.g. the
+        // "no_online_session" sentinel) is not visible, so treat it the same as a
+        // missing image — otherwise the status item can render completely blank.
+        guard button.image == nil || button.imagePosition == .noImage,
               button.title.isEmpty,
               button.attributedTitle.string.isEmpty
         else { return }
